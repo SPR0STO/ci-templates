@@ -39,7 +39,7 @@ or with some specified parameters.
 
 ```bash
 #!/bin/bash
-docker run -e RUN_LOCAL=true -e VALIDATE_ALL_CODEBASE=false -e VALIDATE_PYTHON=true -v ./:/tmp/lint --rm github/super-linter
+docker run -e RUN_LOCAL=true -e VALIDATE_PYTHON=true -v ./:/tmp/lint --rm github/super-linter
 ```
 
 ### Links
