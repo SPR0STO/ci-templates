@@ -1,0 +1,16 @@
+---
+failure-threshold: warning
+format: tty
+# ignored:
+# - DL3007
+override:
+  info:
+    - DL3008
+    - DL3013
+    - DL3007
+#  style:
+#  - DL3015
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+  - "*.gcr.io"

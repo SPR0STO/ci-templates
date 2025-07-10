@@ -1,0 +1,203 @@
+on:
+  pull_request:
+    branches:
+      - main
+      - acceptance
+      - production
+  workflow_dispatch:
+
+jobs:
+  diff_lint:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python linters (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck shfmt
+          npm install -g markdownlint-cli
+          wget -O hadolint "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-$(uname -s)-$(uname -m)"
+          chmod +x hadolint && sudo mv hadolint /usr/local/bin/
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user yamllint black
+          USERBASE=$(python3 -m site --user-base)
+          echo "USERBASE=$USERBASE" >> "$GITHUB_ENV"
+          echo "PATH=$PATH:$USERBASE/bin" >> "$GITHUB_ENV"
+
+      - name: Setup Python linters (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          npm install -g markdownlint-cli
+          brew install hadolint shellcheck shfmt
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install yamllint black
+          echo "VENV_PATH=$(pwd)/venv/bin" >> "$GITHUB_ENV"
+
+      - name: Setup Python linters (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm install -g markdownlint-cli
+          pip install yamllint black
+          choco install hadolint shellcheck shfmt
+          $pyver = python -c "import sys; print(f'Python{sys.version_info.major}{sys.version_info.minor}')"
+          $userBin = "$env:APPDATA\Python\$pyver\Scripts"
+          echo "USER_BIN=$userBin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Fetch base branch
+        run: |
+          git fetch --prune --unshallow || true
+          git fetch origin ${{ github.base_ref }} --depth=100 || true
+
+      - name: Get changed files
+        id: diff
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD > files.txt
+          else
+            git diff --name-only HEAD > files.txt
+          fi
+
+      - name: Filter YAML
+        run: grep -E '\.ya?ml$' files.txt > yaml.txt || true
+      - name: Filter Markdown
+        run: grep -E '\.md$' files.txt > md.txt || true
+      - name: Filter Python
+        run: grep -E '\.py$' files.txt > py.txt || true
+      - name: Filter Dockerfiles
+        run: grep -E '(^|/)Dockerfile([^.]*$|[.].*$)' files.txt > docker.txt || true
+      - name: Filter shell scripts
+        run: grep -E '\.sh$' files.txt > sh.txt || true
+
+      - name: Lint YAML by yamllint (Linux)
+        if: runner.os == 'Linux' && hashFiles('yaml.txt') != ''
+        shell: bash
+        run: |
+          if [ -s yaml.txt ]; then
+            xargs yamllint -c .yamllint.yaml < yaml.txt
+          else
+            echo "No YAML files to lint."
+          fi
+
+      - name: Lint YAML by yamllint (macOS)
+        if: runner.os == 'macOS' && hashFiles('yaml.txt') != ''
+        shell: bash
+        run: |
+          . venv/bin/activate
+          if [ -s yaml.txt ]; then
+            xargs yamllint -c .yamllint.yaml < yaml.txt
+          else
+            echo "No YAML files to lint."
+          fi
+
+      - name: Lint YAML by yamllint (Windows)
+        if: runner.os == 'Windows' && hashFiles('yaml.txt') != ''
+        shell: pwsh
+        run: |
+          $env:Path += ";$env:USER_BIN"
+          if ((Test-Path yaml.txt -PathType Leaf) -and ((Get-Content yaml.txt | Measure-Object -Line).Lines -gt 0)) {
+            Get-Content yaml.txt | ForEach-Object { yamllint -c .yamllint.yaml $_ }
+          } else {
+            Write-Host "No YAML files to lint."
+          }
+
+      - name: Lint Markdown by markdownlint
+        if: hashFiles('md.txt') != ''
+        shell: bash
+        run: |
+          if [ -s md.txt ]; then
+            xargs markdownlint < md.txt
+          else
+            echo "No python files to check."
+          fi
+
+      - name: Check Python format by black (Linux)
+        if: runner.os == 'Linux' && hashFiles('py.txt') != ''
+        shell: bash
+        run: |
+          if [ -s py.txt ]; then
+            xargs black --check < py.txt
+          else
+            echo "No python files to check."
+          fi
+
+      - name: Check Python format by black (macOS)
+        if: runner.os == 'macOS' && hashFiles('py.txt') != ''
+        shell: bash
+        run: |
+          . venv/bin/activate
+          if [ -s py.txt ]; then
+            xargs black --check < py.txt
+          else
+            echo "No python files to check."
+          fi
+
+      - name: Check Python format by black (Windows)
+        if: runner.os == 'Windows' && hashFiles('py.txt') != ''
+        shell: pwsh
+        run: |
+          $env:Path += ";$env:USER_BIN"
+          if ((Test-Path py.txt -PathType Leaf) -and (Get-Content py.txt | Measure-Object -Line).Lines -gt 0) {
+            Get-Content py.txt | ForEach-Object { black --check $_ }
+          } else {
+            Write-Host "No python files to check."
+          }
+
+      - name: Lint Dockerfiles by hadolint (Linux)
+        if: runner.os == 'Linux' && hashFiles('docker.txt') != ''
+        shell: bash
+        run: |
+          if [ -s docker.txt ]; then
+            xargs hadolint < docker.txt
+          else
+            echo "No Dockerfiles to lint."
+          fi
+
+      - name: Lint Dockerfiles by hadolint (macOS)
+        if: runner.os == 'macOS' && hashFiles('docker.txt') != ''
+        shell: bash
+        run: |
+          if [ -s docker.txt ]; then
+            xargs hadolint < docker.txt
+          else
+            echo "No Dockerfiles to lint."
+          fi
+
+      - name: Lint Dockerfiles by hadolint (Windows)
+        if: runner.os == 'Windows' && hashFiles('docker.txt') != ''
+        shell: pwsh
+        run: |
+          if ((Test-Path docker.txt -PathType Leaf) -and (Get-Content docker.txt | Measure-Object -Line).Lines -gt 0) {
+            Get-Content docker.txt | ForEach-Object { hadolint $_ }
+          } else {
+            Write-Host "No Dockerfiles to lint."
+          }
+
+      - name: Lint shell scripts by shfmt
+        if: hashFiles('sh.txt') != ''
+        shell: bash
+        run: |
+          if [ -s sh.txt ]; then
+            xargs shfmt -d < sh.txt
+          else
+            echo "No shell scripts to lint."
+          fi
+
+      - name: Lint shell scripts by shellcheck
+        if: hashFiles('sh.txt') != ''
+        shell: bash
+        run: |
+          if [ -s sh.txt ]; then
+            xargs shellcheck < sh.txt
+          else
+            echo "No shell scripts to lint."
+          fi
