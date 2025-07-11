@@ -23,7 +23,7 @@ jobs:
 # yamllint
   yamllint:
     if: contains(fromJson(inputs.linters || '["yamllint"]'), 'yamllint')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
 # Fetching and get difference
       - uses: ./.github/actions/filter-diff
@@ -95,7 +95,7 @@ jobs:
 # hadolint
   hadolint:
     if: contains(fromJson(inputs.linters || '["hadolint"]'), 'hadolint')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
       # Fetching and get difference
       - uses: ./.github/actions/filter-diff
@@ -157,7 +157,7 @@ jobs:
 # black
   black:
     if: contains(fromJson(inputs.linters || '["black"]'), 'black')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
       # Fetching and get difference
       - uses: ./.github/actions/filter-diff
@@ -216,7 +216,7 @@ jobs:
 # markdownlint
   markdownlint:
     if: contains(fromJson(inputs.linters || '["markdownlint"]'), 'markdownlint')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
 # Fetching and get difference
       - uses: ./.github/actions/filter-diff
@@ -277,7 +277,7 @@ jobs:
 # shfmt
   shfmt:
     if: contains(fromJson(inputs.linters || '["shfmt"]'), 'shfmt')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
 # Fetching and get difference
       - uses: ./.github/actions/filter-diff
@@ -325,7 +325,7 @@ jobs:
 # shellcheck
   shellcheck:
     if: contains(fromJson(inputs.linters || '["shellcheck"]'), 'shellcheck')
-    runs-on: ${{ inputs.runner_os }}
+    runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
 # Fetching and get difference
       - uses: ./.github/actions/filter-diff
