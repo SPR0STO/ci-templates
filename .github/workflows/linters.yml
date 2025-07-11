@@ -27,12 +27,21 @@ jobs:
     steps:
 # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '\.ya?ml$'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '\.ya?ml$' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '\.ya?ml$' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
@@ -100,12 +109,21 @@ jobs:
     steps:
       # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '(^|/)Dockerfile([^.]*$|[.].*$)'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '(^|/)Dockerfile([^.]*$|[.].*$)' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '(^|/)Dockerfile([^.]*$|[.].*$)' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
@@ -163,12 +181,21 @@ jobs:
     steps:
       # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '\.py$'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '\.py$' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '\.py$' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
@@ -223,12 +250,21 @@ jobs:
     steps:
 # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '\.md$'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '\.md$' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '\.md$' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
@@ -285,12 +321,21 @@ jobs:
     steps:
 # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '\.sh$'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '\.sh$' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '\.sh$' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
@@ -334,12 +379,21 @@ jobs:
     steps:
 # Fetching and get difference
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/filter-diff
+
+      - name: Get changed files of specific type
         id: diff
-        with:
-          base_ref: ${{ github.base_ref }}
-          file_pattern: '\.sh$'
-          output_file: diff.txt
+        shell: bash
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff --name-only origin/main...HEAD | grep -E '\.sh$' > diff.txt || true
+          else
+            git diff --name-only HEAD | grep -E '\.sh$' > diff.txt || true
+          fi
+          if [ -s diff.txt ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 # Installation
       - name: Linux runner setup
         if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
