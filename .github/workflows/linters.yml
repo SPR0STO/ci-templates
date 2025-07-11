@@ -1,3 +1,5 @@
+name: centralized linters
+
 on:
   pull_request:
     branches:
@@ -5,199 +7,371 @@ on:
       - acceptance
       - production
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      runner_os:
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      linters:
+        required: false
+        type: string
+        default: |
+          - yamllint
+          - black
+          - hadolint
+          - shfmt
+          - shellcheck
+          - markdownlint
 
 jobs:
-  diff_lint:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Setup Python linters (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
+# yamllint
+  yamllint:
+    if: contains(fromJson(inputs.linters), 'yamllint')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+# Fetching and get difference
+      - uses: ./.github/actions/filter-diff
+        id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '\.ya?ml$'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
         run: |
-          sudo apt-get update && sudo apt-get install -y shellcheck shfmt
-          npm install -g markdownlint-cli
-          wget -O hadolint "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-$(uname -s)-$(uname -m)"
-          chmod +x hadolint && sudo mv hadolint /usr/local/bin/
           python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user yamllint black
+          python3 -m pip install --user yamllint
           USERBASE=$(python3 -m site --user-base)
           echo "USERBASE=$USERBASE" >> "$GITHUB_ENV"
           echo "PATH=$PATH:$USERBASE/bin" >> "$GITHUB_ENV"
 
-      - name: Setup Python linters (macOS)
-        if: runner.os == 'macOS'
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          npm install -g markdownlint-cli
-          brew install hadolint shellcheck shfmt
           python3 -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
-          pip install yamllint black
+          pip install yamllint
           echo "VENV_PATH=$(pwd)/venv/bin" >> "$GITHUB_ENV"
 
-      - name: Setup Python linters (Windows)
-        if: runner.os == 'Windows'
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
         shell: pwsh
         run: |
-          npm install -g markdownlint-cli
-          pip install yamllint black
-          choco install hadolint shellcheck shfmt
+          pip install yamllint
           $pyver = python -c "import sys; print(f'Python{sys.version_info.major}{sys.version_info.minor}')"
           $userBin = "$env:APPDATA\Python\$pyver\Scripts"
           echo "USER_BIN=$userBin" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Fetch base branch
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        shell: bash
         run: |
-          git fetch --prune --unshallow || true
-          git fetch origin ${{ github.base_ref }} --depth=100 || true
+          if [ -f .yamllint.yaml ]; then
+            xargs yamllint -c .yamllint.yaml < diff.txt
+          else
+            xargs yamllint < diff.txt
+          fi
 
-      - name: Get changed files
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+          if [ -f .yamllint.yaml ]; then
+            xargs yamllint -c .yamllint.yaml < diff.txt
+          else
+            xargs yamllint < diff.txt
+          fi
+
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          $env:Path += ";$env:USER_BIN"
+          if (Test-Path .yamllint.yaml) {
+            Get-Content diff.txt | ForEach-Object { yamllint -c .yamllint.yaml $_ }
+          } else {
+            Get-Content diff.txt | ForEach-Object { yamllint $_ }
+          }
+
+# hadolint
+  hadolint:
+    if: contains(fromJson(inputs.linters), 'hadolint')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+      # Fetching and get difference
+      - uses: ./.github/actions/filter-diff
         id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '(^|/)Dockerfile([^.]*$|[.].*$)'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        run: |
+          wget -O hadolint "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-$(uname -s)-$(uname -m)"
+          chmod +x hadolint && sudo mv hadolint /usr/local/bin/
+
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if git show-ref --verify --quiet refs/remotes/origin/main; then
-            git diff --name-only origin/main...HEAD > files.txt
-          else
-            git diff --name-only HEAD > files.txt
-          fi
+          brew install hadolint
 
-      - name: Filter YAML
-        run: grep -E '\.ya?ml$' files.txt > yaml.txt || true
-      - name: Filter Markdown
-        run: grep -E '\.md$' files.txt > md.txt || true
-      - name: Filter Python
-        run: grep -E '\.py$' files.txt > py.txt || true
-      - name: Filter Dockerfiles
-        run: grep -E '(^|/)Dockerfile([^.]*$|[.].*$)' files.txt > docker.txt || true
-      - name: Filter shell scripts
-        run: grep -E '\.sh$' files.txt > sh.txt || true
-
-      - name: Lint YAML by yamllint (Linux)
-        if: runner.os == 'Linux' && hashFiles('yaml.txt') != ''
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          choco install hadolint
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if [ -s yaml.txt ]; then
-            xargs yamllint -c .yamllint.yaml < yaml.txt
+          if [ -f .hadolint.yaml ]; then
+            xargs hadolint -c .hadolint.yaml < diff.txt
           else
-            echo "No YAML files to lint."
+            xargs hadolint < diff.txt
           fi
 
-      - name: Lint YAML by yamllint (macOS)
-        if: runner.os == 'macOS' && hashFiles('yaml.txt') != ''
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          . venv/bin/activate
-          if [ -s yaml.txt ]; then
-            xargs yamllint -c .yamllint.yaml < yaml.txt
+          if [ -f .hadolint.yaml ]; then
+            xargs hadolint -c .hadolint.yaml < diff.txt
           else
-            echo "No YAML files to lint."
+            xargs hadolint < diff.txt
           fi
 
-      - name: Lint YAML by yamllint (Windows)
-        if: runner.os == 'Windows' && hashFiles('yaml.txt') != ''
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
         shell: pwsh
         run: |
           $env:Path += ";$env:USER_BIN"
-          if ((Test-Path yaml.txt -PathType Leaf) -and ((Get-Content yaml.txt | Measure-Object -Line).Lines -gt 0)) {
-            Get-Content yaml.txt | ForEach-Object { yamllint -c .yamllint.yaml $_ }
+          if (Test-Path .hadolint.yaml) {
+            Get-Content diff.txt | ForEach-Object { hadolint -c .hadolint.yaml $_ }
           } else {
-            Write-Host "No YAML files to lint."
+            Get-Content diff.txt | ForEach-Object { hadolint $_ }
           }
 
-      - name: Lint Markdown by markdownlint
-        if: hashFiles('md.txt') != ''
+# black
+  black:
+    if: contains(fromJson(inputs.linters), 'black')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+      # Fetching and get difference
+      - uses: ./.github/actions/filter-diff
+        id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '\.py$'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        run: |
+          python3 -m pip install --user black
+          USERBASE=$(python3 -m site --user-base)
+          echo "USERBASE=$USERBASE" >> "$GITHUB_ENV"
+          echo "PATH=$PATH:$USERBASE/bin" >> "$GITHUB_ENV"
+
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if [ -s md.txt ]; then
-            xargs markdownlint < md.txt
-          else
-            echo "No python files to check."
-          fi
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install black
+          echo "VENV_PATH=$(pwd)/venv/bin" >> "$GITHUB_ENV"
 
-      - name: Check Python format by black (Linux)
-        if: runner.os == 'Linux' && hashFiles('py.txt') != ''
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          pip install black
+          $pyver = python -c "import sys; print(f'Python{sys.version_info.major}{sys.version_info.minor}')"
+          $userBin = "$env:APPDATA\Python\$pyver\Scripts"
+          echo "USER_BIN=$userBin" | Out-File -FilePath $env:GITHUB_ENV -Append
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if [ -s py.txt ]; then
-            xargs black --check < py.txt
-          else
-            echo "No python files to check."
-          fi
+            xargs black --check < diff.txt
 
-      - name: Check Python format by black (macOS)
-        if: runner.os == 'macOS' && hashFiles('py.txt') != ''
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
           . venv/bin/activate
-          if [ -s py.txt ]; then
-            xargs black --check < py.txt
-          else
-            echo "No python files to check."
-          fi
+            xargs black --check < diff.txt
 
-      - name: Check Python format by black (Windows)
-        if: runner.os == 'Windows' && hashFiles('py.txt') != ''
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
         shell: pwsh
         run: |
-          $env:Path += ";$env:USER_BIN"
-          if ((Test-Path py.txt -PathType Leaf) -and (Get-Content py.txt | Measure-Object -Line).Lines -gt 0) {
-            Get-Content py.txt | ForEach-Object { black --check $_ }
-          } else {
-            Write-Host "No python files to check."
-          }
+          Get-Content diff.txt | ForEach-Object { black --check $_ }
 
-      - name: Lint Dockerfiles by hadolint (Linux)
-        if: runner.os == 'Linux' && hashFiles('docker.txt') != ''
+# markdownlint
+  markdownlint:
+    if: contains(fromJson(inputs.linters), 'markdownlint')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+# Fetching and get difference
+      - uses: ./.github/actions/filter-diff
+        id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '\.md$'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        run: |
+          npm install -g markdownlint-cli
+
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if [ -s docker.txt ]; then
-            xargs hadolint < docker.txt
-          else
-            echo "No Dockerfiles to lint."
-          fi
+          npm install -g markdownlint-cli
 
-      - name: Lint Dockerfiles by hadolint (macOS)
-        if: runner.os == 'macOS' && hashFiles('docker.txt') != ''
-        shell: bash
-        run: |
-          if [ -s docker.txt ]; then
-            xargs hadolint < docker.txt
-          else
-            echo "No Dockerfiles to lint."
-          fi
-
-      - name: Lint Dockerfiles by hadolint (Windows)
-        if: runner.os == 'Windows' && hashFiles('docker.txt') != ''
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
         shell: pwsh
         run: |
-          if ((Test-Path docker.txt -PathType Leaf) -and (Get-Content docker.txt | Measure-Object -Line).Lines -gt 0) {
-            Get-Content docker.txt | ForEach-Object { hadolint $_ }
+          npm install -g markdownlint-cli
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+          if [ -f .markdownlint.yaml  ]; then
+            xargs markdownlint -c .markdownlint.yaml < diff.txt
+          else
+            xargs markdownlint < diff.txt
+          fi
+
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+          if [ -f .markdownlint.yaml  ]; then
+            xargs markdownlint -c .markdownlint.yaml < diff.txt
+          else
+            xargs markdownlint < diff.txt
+          fi
+
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          $env:Path += ";$env:APPDATA\npm"
+          if (Test-Path .markdownlint.yaml) {
+            Get-Content diff.txt | ForEach-Object { markdownlint -c .markdownlint.yaml $_ }
           } else {
-            Write-Host "No Dockerfiles to lint."
+            Get-Content diff.txt | ForEach-Object { markdownlint $_ }
           }
 
-      - name: Lint shell scripts by shfmt
-        if: hashFiles('sh.txt') != ''
-        shell: bash
+# shfmt
+  shfmt:
+    if: contains(fromJson(inputs.linters), 'shfmt')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+# Fetching and get difference
+      - uses: ./.github/actions/filter-diff
+        id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '\.sh$'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
         run: |
-          if [ -s sh.txt ]; then
-            xargs shfmt -d < sh.txt
-          else
-            echo "No shell scripts to lint."
-          fi
+          sudo apt-get update && sudo apt-get install -y shfmt
 
-      - name: Lint shell scripts by shellcheck
-        if: hashFiles('sh.txt') != ''
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
         shell: bash
         run: |
-          if [ -s sh.txt ]; then
-            xargs shellcheck < sh.txt
-          else
-            echo "No shell scripts to lint."
-          fi
+          brew install shfmt
+
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          choco install shfmt
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+            xargs shfmt -d < diff.txt
+
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+            xargs shfmt -d < diff.txt
+
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          Get-Content diff.txt | ForEach-Object { shfmt -d $_ }
+
+# shellcheck
+  shellcheck:
+    if: contains(fromJson(inputs.linters), 'shellcheck')
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+# Fetching and get difference
+      - uses: ./.github/actions/filter-diff
+        id: diff
+        with:
+          base_ref: ${{ github.base_ref }}
+          file_pattern: '\.sh$'
+          output_file: diff.txt
+# Installation
+      - name: Linux runner setup
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: macOS runner setup
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+          brew install shellcheck
+
+      - name: Windows runner setup
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          choco install shellcheck
+# Linting
+      - name: Linting on Linux runner
+        if: runner.os == 'Linux' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+            xargs shellcheck < diff.txt
+
+      - name: Linting on macOS runner
+        if: runner.os == 'macOS' && steps.diff.outputs.found == 'true'
+        shell: bash
+        run: |
+            xargs shellcheck < diff.txt
+
+      - name: Linting on Windows runner
+        if: runner.os == 'Windows' && steps.diff.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          Get-Content diff.txt | ForEach-Object { shellcheck $_ }
