@@ -1,1 +1,6 @@
-# ci-templates
+# CI Templates
+
+## Requirements
+
+git
+Docker

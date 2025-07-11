@@ -1,0 +1,23 @@
+#!/bin/sh
+
+docker run -e DISABLE_ERRORS=false \
+           -e LOG_LEVEL=WARN \
+           -e VALIDATE_ALL_CODEBASE=true \
+           -e IGNORE_GITIGNORED_FILES=true \
+           -w /tmp/lint \
+           -v .:/tmp/lint \
+           -e VALIDATE_GITHUB_ACTIONS=true \
+           -e VALIDATE_TERRAFORM_FMT=true \
+           -e VALIDATE_TERRAFORM_TFLINT=true \
+           -e TERRAFORM_TFLINT_CONFIG_FILE=.tflint.hcl \
+           -e VALIDATE_DOCKERFILE_HADOLINT=true \
+           -e DOCKERFILE_HADOLINT_FILE_NAME=.hadolint.yaml \
+           -e VALIDATE_YAML=true \
+           -e YAML_ERROR_ON_WARNING=false \
+           -e YAML_CONFIG_FILE=.yamllint.yaml \
+           -e VALIDATE_ANSIBLE=true \
+           -e ANSIBLE_CONFIG_FILE=.ansible-lint.yml \
+           -e ANSIBLE_DIRECTORY=. \
+           -e VALIDATE_BASH=true \
+           -e VALIDATE_MARKDOWN=true \
+           -e LINTER_RULES_PATH=/ -e RUN_LOCAL=true --rm github/super-linter
