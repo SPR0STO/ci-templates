@@ -16,13 +16,7 @@ on:
       linters:
         required: false
         type: string
-        default: |
-          - yamllint
-          - black
-          - hadolint
-          - shfmt
-          - shellcheck
-          - markdownlint
+        default: '["yamllint", "black", "hadolint", "shfmt", "shellcheck", "markdownlint"]'
 
 jobs:
 
