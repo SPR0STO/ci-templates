@@ -26,6 +26,7 @@ jobs:
     runs-on: ${{ inputs.runner_os || 'ubuntu-latest' }}
     steps:
 # Fetching and get difference
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/filter-diff
         id: diff
         with:
